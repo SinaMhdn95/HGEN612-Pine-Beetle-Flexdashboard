@@ -1,5 +1,6 @@
 required_files <- c(
   "dashboard.Rmd",
+  "render_dashboard.R",
   "data/pine_beetle_1993.xlsx",
   "README.md",
   "NOTICE.md"
@@ -26,5 +27,6 @@ stopifnot("Dashboard has no absolute home path" = !grepl("/Users/", source_text,
 stopifnot("Square-root outcome is not transformed twice" = !grepl("step_sqrt(all_outcomes())", source_text, fixed = TRUE))
 stopifnot("Log transform keeps zero-valued observations" = grepl("log(BA_Inf_20th + 0.001)", source_text, fixed = TRUE))
 stopifnot("Train/test split is reproducible" = grepl("set.seed(612)", source_text, fixed = TRUE))
+stopifnot("Dashboard explains that the complete repository is required" = grepl("not standalone", source_text, fixed = TRUE))
 
 message("Pine beetle dashboard smoke test passed.")
