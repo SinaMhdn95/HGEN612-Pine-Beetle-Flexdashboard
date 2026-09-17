@@ -1,0 +1,560 @@
+---
+title: "Predicting Pine Tree Infestation: A Data-Driven Approach"
+subtitle: "By Sina Mahdiani, Data Science2"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    theme: sandstone
+    source_code: embed
+    logo: img/3_copy.png
+    favicon: img/3_copy.png
+---
+```{css, eval = TRUE, echo = FALSE}
+.dataTables_scrollBody {
+  max-height: 100% !important;
+  max-width: 100% !important;
+}
+```
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidymodels)      # for the parsnip package, along with the rest of tidymodels
+library(tidyverse)       # for importing data
+library(dotwhisker)      # for inspecting model coefficients
+library(skimr)           # for variable summaries
+library(patchwork)       # plot composer
+library(broom.mixed)     # for converting bayesian model output to tidy tibbles
+library(readxl)          # for reading an Excel file into a dataframe
+library(broom)           # for converting model outputs into tidy data frames
+library(car)             # for regression diagnostics and multicollinearity checks
+library(ggfortify)       # for visualization
+library(vip)             # for computing and visualizing variable importance in ML model
+library(performance)     # for assessing model quality
+library(plotly)          # for creating interactive plots
+library(ggplot2)
+library(knitr)
+library(dplyr)
+library(glmnet)
+library(patchwork)
+library(GGally)
+library(corrr)
+library(gt)
+library(broom)
+library(see)
+```
+
+```{r loadData, echo=FALSE}
+#Load the dataset
+data_work1 <- read_excel("Data_1993.xlsx", sheet = 1)
+data_work1 <- na.omit(data_work1)
+```
+
+Introduction to Dataset {data-navmenu="Dataset Overview"}
+===================================== 
+
+Column {data-width=200}
+-----------------------------------------------------------------------
+### **Pine Beetles Life Cycle**
+
+```{r picture, echo = F, out.width = '100%'}
+include_graphics("img/1.jpg")
+```
+
+
+### **Data Dictionary for Selected Variables**
+
+```{r Dictionary, echo=FALSE}
+# Select variables and make a dictionary
+
+data.frame(
+  Variables = c("DeadDist", "TreeDiam", "Infest_Serv1", "Ind_DeadDist", 
+                "SDI_20th", "BA_20th", "Neigh_1/2th", "Neigh_1", 
+                "BA_Inf_20th", "BA_Infest_1/2th", "BA_Infest_1"),
+  
+  Description = c("Minimum linear distance to nearest brood tree",
+                  "Tree diameter", 
+                  "Infestation severity of the nearest affected tree", 
+                  "Indicator if nearest brood tree is within 50m effective distance found",
+                  "Stand Density Index at 1/20th-acre neighborhood surrounding the tree",
+                  "Basal Area at 1/20th-acre neighborhood surrounding response tree",
+                  "Basal area total summed for all trees within 1/2th-acre neighborhood of response tree",
+                  "Basal area total summed for all trees within 1-acre neighborhood of response tree",
+                  "Basal area total for all infested trees within 1/20th-acre neighborhood",
+                  "Basal area of infested trees within 1/2th-acre neighborhood of response tree", 
+                  "Basal area of infested trees within 1-acre neighborhood of response tree"),
+  
+  Type = c("Outcome", "Predictor", "Predictor", "Predictor", 
+                           "Predictor", "Predictor", "Predictor", "Predictor", 
+                           "Predictor", "Predictor", "Predictor")) %>% 
+  kable()
+
+
+
+```
+
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### **Jeffrey Pine Beetle (JPB) Infestation Distribution in Lake Tahoe Basin in 1993**
+
+```{r ggplot, echo=FALSE}
+# Convert Response to a factor before plotting
+data_work1$Response_Factor <- factor(data_work1$Response, labels = c("Alive", "JPB-attacked"))
+# Create ggplot
+plot1 <- ggplot(data = data_work1, aes(x = Easting, y = Northing)) +
+  geom_point(aes(
+    color = Response_Factor,
+    text = paste(
+      "TreeNum:", TreeNum,
+      "<br>Status:", Response_Factor,
+      "<br>Tree Diameter:", TreeDiam, 
+      "<br>Infestation Severity 1:", Infest_Serv1,
+      "<br>Infestation Severity 2:", Infest_Serv2,
+      "<br>Stand Density Index (SDI):", SDI_20th,
+      "<br>Basal Area:", BA_20th)), alpha = 0.7) +  
+  scale_color_manual("Tree Condition", values = c("darkgreen", "#f765a3")) +  
+  theme_bw() +
+  theme(
+    legend.title = element_text(face = "bold", size = 16),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.text = element_text(size = 12)
+  )
+
+# Convert to interactive plot
+ggplotly(plot1, tooltip = "text")
+```
+Dataset summary {data-navmenu="Dataset Overview"}
+=====================================
+
+Row {data-width=200}
+-----------------------------------------------------------------------
+
+### **Original Dataset**
+```{r datatable, echo=FALSE}
+library(DT)
+
+DT::datatable(
+  data_work1,
+  options = list(
+    scrollY = "300px",
+    scrollX = TRUE,  
+    fixedHeader = FALSE,  
+    paging = TRUE  
+  )
+)
+```
+
+<div style="background-color: #d4edda; padding: 15px; border-radius: 10px;">
+### **Data summary for selected variables**
+```{r DataSum}
+data_work1 %>% 
+  skim()
+```
+</div>
+
+
+Exploratory Analysis {data-navmenu="Dataset Overview"}
+=====================================
+
+Column {data-width=300}
+-----------------------------------------------------------------------
+
+### **Tree density And beetle population**
+
+```{r pop-density, fig.width = 13, fig.height = 10}
+
+data_work1 %>%
+  mutate(
+    dens_groups = case_when(SDI_20th < mean(SDI_20th) - sd(SDI_20th) ~ 1,
+                            SDI_20th > mean(SDI_20th) + sd(SDI_20th) ~ 3,
+                            TRUE ~ 2),
+    dens_groups = factor(dens_groups,
+                         labels = c("Mean - SD",
+                                    "Mean",
+                                    "Mean + SD"))
+    ) %>%
+  ggplot(aes(x = dens_groups)) +
+  geom_boxplot(aes(y = log(BA_Inf_20th - 0.001))) +
+  geom_jitter(aes(y = log(BA_Inf_20th - 0.001)),
+              alpha = 0.9, width = 0.25, height = 0.1,
+              color = "#669966") +
+  labs(x = "Tree density", y = "Beetle population (log)") +
+  theme_bw() +
+  theme(text = element_text(size = 30))
+
+```
+
+
+Column {data-width=300}
+-----------------------------------------------------------------------
+### **Tree Diameter Histogram**
+
+```{r}
+data_work1$DeadDist_sqrt <- sqrt(as.numeric(data_work1$DeadDist))
+
+hist(data_work1$DeadDist_sqrt,
+     col = "forestgreen",
+     main = "Histogram of square root of DeadDistance",
+     xlab = "Square Root of DeadDist",
+     ylab = "Frequency",
+     border = "white")
+```
+
+Column {data-width=300}
+-----------------------------------------------------------------------
+
+### **DeadDist vs TreeDiam**
+```{r}
+data_work1 %>% 
+  mutate(Ind_DeadDist = as.factor(Ind_DeadDist))  %>% 
+  filter(TreeDiam < 50)  %>% 
+  ggplot(aes(x = TreeDiam, y = DeadDist, group = Ind_DeadDist)) +
+  geom_point(aes(color = Ind_DeadDist)) +
+  geom_smooth(method = "lm") +
+  scale_color_manual(
+    values = c("#f765a3", "#669966"),
+    labels = c(">50 meters", "within 50 meters")  # Rename factor levels
+  ) +
+  labs(color = "Brood Tree Distance") + 
+  theme_bw()
+```
+
+
+
+
+
+
+Linear Regression Model
+=====================================
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### **Linear Regression Model Check**
+
+```{r LRM}
+# BUILD A LINEAR REGRESSION MODEL --------------------------------
+
+# Fit the model (primary model)
+
+# lm_fit <- lm(DeadDist ~ TreeDiam+Infest_Serv1+Ind_DeadDist+SDI_20th+BA_20th+
+#               `Neigh_1/2th`+Neigh_1+BA_Inf_20th+BA_Infest_1, data = data_work1)
+
+# lm_fit %>%
+#  tidy()
+
+# lm_fit %>% 
+#  glance()  #adjusted r.squared 0.692
+
+# multicoll <- vif(lm_fit)  #multicollinearity
+
+# SDI_20th, BA_20th, Neigh_1/2th, Neigh_1 has high multicollinearity based on their vif
+# The first step is excluding SDI_20th and refit model. Since SDI_20th has the biggest vif
+
+lm_fit2 <- lm(DeadDist ~ TreeDiam+Infest_Serv1+Ind_DeadDist+BA_20th+
+               `Neigh_1/2th`+Neigh_1+BA_Inf_20th+BA_Infest_1, data = data_work1)
+# lm_fit2 %>%
+#  tidy()
+
+# lm_fit2 %>% 
+#  glance()
+
+# Check multicollinearity
+multicoll2 <- vif(lm_fit2)
+
+#Check model (check the assumptions)
+model_check2 <- check_model(lm_fit2)
+
+# Still we can see some multicollinearity
+# We do use LASSO to handle the multicollinearity
+#we're gonna use tidy model
+
+# Feature Engineering ( to improve linearity, reduce skewness and stabilize variances)
+# Variable transformation
+data_work1 <- data_work1 %>% 
+  mutate(DeadDist_log = log(data_work1$DeadDist)) %>% 
+  mutate(DeadDist_sqrt = sqrt(data_work1$DeadDist))
+
+# hist(data_work1$DeadDist)
+# hist(data_work1$DeadDist_log)
+# histo_sqrt = hist(data_work1$DeadDist_sqrt) # the best one
+
+# Create Recipe
+data_work2 <- data_work1 %>% 
+  recipe(DeadDist_sqrt ~ TreeDiam+Infest_Serv1+Ind_DeadDist+BA_20th+
+           `Neigh_1/2th`+Neigh_1+BA_Inf_20th+BA_Infest_1) %>% 
+  step_sqrt(all_outcomes()) %>% 
+  step_corr(all_predictors())
+
+# View feature engineered data
+# data_work2 %>%
+#  prep() %>% 
+#  bake(new_data = NULL)    #supercedes juice()
+
+# * Create Model ----
+lm_mod <- 
+  linear_reg() %>% 
+  set_engine("lm")
+
+
+# * Create Workflow ----
+data_workflow <- 
+  workflow() %>% 
+  add_model(lm_mod) %>% 
+  add_recipe(data_work2)
+
+
+pine_fit <- 
+  data_workflow %>% 
+  fit(data = data_work1)
+
+
+# pine_fit %>% 
+#  extract_fit_parsnip() %>% 
+#  tidy()
+
+# pine_fit %>% 
+#  extract_fit_parsnip() %>% 
+#  glance()
+
+pine_fit %>% 
+  extract_fit_parsnip() %>% 
+  check_model( dot_size = .6,
+                line_size = 0.8,
+                check = c("vif", "qq", "pp_check", "linearity"), 
+                colors = c("#AA0078", "#669966", "#cd201f"),
+                base_size = 7,
+                theme = "ggplot2::theme_bw")
+
+# pine_fit %>% 
+#  extract_preprocessor()
+
+# pine_fit %>% 
+#  extract_spec_parsnip()
+```
+  
+Column {data-width=350}
+-----------------------------------------------------------------------
+### **Model Estimates**
+
+```{r LRMest, fig.height=7}
+pine_fit %>% 
+  extract_fit_parsnip() %>% 
+  tidy() %>% 
+  kable(digits = 2)
+```
+
+
+### **Model Summary Statistics**
+
+```{r LRMSum, fig.height=2}
+lm_mod_values <- pine_fit %>%
+  extract_fit_parsnip() %>%
+  glance()%>%
+  select(r.squared, sigma, statistic, p.value, df, AIC)
+lm_mod_values %>% 
+  kable(digits = 2)
+```
+
+### **Model Performance: R-squared ($R^2$)**
+
+```{r LRMgauge}
+
+lm_mod_r2 <- pine_fit %>%
+  extract_fit_parsnip() %>%
+  glance() %>%
+  pull(r.squared)
+  
+gauge(round(as.numeric(lm_mod_r2*100),2), min = 0, max = 100, symbol = "%",  gaugeSectors(success = c(60, 100), colors = '#A2CD5A'))
+
+```
+### **Model Performance: Root Mean Square Error (RMSE)**
+
+```{r LRMgauge2}
+
+lm_mod_r3 <- pine_fit %>%
+  extract_fit_parsnip() %>%
+  glance() %>%
+  pull(sigma)
+  
+gauge(round(as.numeric(lm_mod_r3),2), min = 0, max = 5,  gaugeSectors(success = c(1, 5), colors = '#AA0078'))
+
+```
+
+Regularization
+===================================== 
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### **RIDGE and LASSO** 
+
+**RIDGE** and **LASSO** regression are two types of regularized linear regression techniques used to prevent overfitting by penalizing large coefficients. <br>
+**Ridge regression** adds an L2 penalty (squared magnitude of coefficients) to the loss function, which shrinks all coefficients but does not eliminate any, making it useful when all predictors are relevant. <br>
+**Lasso regression**, on the other hand, adds an L1 penalty (absolute value of coefficients), which can shrink some coefficients to exactly zero, effectively performing variable selection. <br>
+Both methods help improve model generalization, especially when dealing with multicollinearity or high-dimensional data.
+
+### **RIDGE Regression Model Summary Statistics**
+```{r RIDG-sum}
+# RIDGE REGRESSION ----
+# Create training/testing data
+pine_split <- initial_split(data_work1)
+pine_train <- training(pine_split)
+pine_test <- testing(pine_split)
+
+ridge_mod <-
+  linear_reg(mixture = 0, penalty = 0.1629751) %>%  #validation sample or resampling can estimate this
+  set_engine("glmnet")
+  
+# create a new recipe; could use `add_step()` to recipe created above
+pine_recipe2 <- pine_train %>% 
+  recipe(DeadDist_sqrt ~ TreeDiam+Infest_Serv1+Ind_DeadDist+BA_20th+
+           `Neigh_1/2th`+Neigh_1+BA_Inf_20th+BA_Infest_1) %>% 
+  step_sqrt(all_outcomes()) %>% 
+  step_corr(all_predictors()) %>% 
+  step_normalize(all_numeric(), -all_outcomes()) %>% 
+  step_zv(all_numeric(), -all_outcomes())
+  
+
+pine_ridge_wflow <- 
+  workflow() %>%
+  add_model(ridge_mod) %>%
+  add_recipe(pine_recipe2)
+  
+pine_ridge_fit <- 
+  pine_ridge_wflow %>% 
+  fit(data = pine_train)
+  
+pine_ridge_fit %>% 
+  tidy() %>% 
+  kable()
+
+
+```
+
+### **Model Performance: R-squared ($R^2$) for RIDGE Model** 
+
+```{r RIDGE-R2}
+
+# refit best model on training and evaluate on testing
+ridge_rsq <- last_fit( 
+  pine_ridge_wflow,
+  pine_split
+) %>%
+  collect_metrics() %>% 
+  filter(.metric == "rsq") %>% 
+  pull(.estimate)
+
+gauge(ridge_rsq*100, min = 0, max = 100, symbol = "%",  gaugeSectors(success = c(60, 100), colors = '#AA0078'))
+```
+
+
+### **RMSE: Root Mean Square Error for RIDGE Model**
+
+```{r RIDGE-RMSE}
+
+ridge_rmse <- last_fit( 
+  pine_ridge_wflow,
+  pine_split
+) %>%
+  collect_metrics() %>% 
+  filter(.metric == "rmse") %>% 
+  pull(.estimate)
+
+gauge(round(as.numeric(ridge_rmse),3), min = 0, max = 5,  gaugeSectors(success = c(0, 5), colors = '#AA0078'))
+```
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+### **List of Predictors Retained via LASSO Regression Model**
+```{r LASSO-model}
+
+# create bootstrap samples for resampling and tuning the penalty parameter
+set.seed(1234)
+pine_boot <- bootstraps(pine_train)
+
+# create a grid of tuning parameters
+lambda_grid <- grid_regular(penalty(), levels = 50)
+
+
+lasso_mod <-
+  linear_reg(mixture = 1, penalty = tune()) %>% # tune() to figure out the best fit number is from the botstrap 
+  set_engine("glmnet")
+
+
+# create workflow
+pine_lasso_wflow <- 
+  workflow() %>% 
+  add_model(lasso_mod) %>% 
+  add_recipe(pine_recipe2)
+
+
+set.seed(2020)
+lasso_grid <- tune_grid(
+  pine_lasso_wflow,
+  resamples = pine_boot,
+  grid = lambda_grid
+)
+
+
+lowest_rmse <- select_best(lasso_grid, metric = "rmse")
+
+# update our final model with lowest rmse
+final_lasso <- finalize_workflow(
+  pine_lasso_wflow,
+  lowest_rmse
+)
+
+# variable importance plot
+final_lasso %>%
+  fit(pine_train) %>%
+  pull_workflow_fit() %>%
+  vi(lambda = lowest_rmse$penalty) %>%
+  mutate(
+    Importance = abs(Importance),
+    Variable = fct_reorder(Variable, Importance)
+  ) %>%
+  ggplot(aes(x = Importance, y = Variable, fill = Sign)) +
+  geom_col() +
+  scale_fill_manual(values = c("#A2CD5A", "#AA0078"))+
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(y = NULL) +
+  theme_bw() +
+  theme_minimal(15) 
+
+```
+
+### **Model Performance: R-squared ($R^2$) for LASSO Model** 
+
+```{r LASSO-R2}
+# R-Squared
+lasso_rsq <- last_fit(
+  final_lasso,
+  pine_split
+) %>%
+  collect_metrics() %>% 
+  filter(.metric == "rsq") %>% 
+  pull(.estimate)
+
+gauge(round(as.numeric(lasso_rsq*100),2), min = 0, max = 100, symbol = "%",  gaugeSectors(success = c(60, 100), colors = '#A2CD5A'))
+
+```
+
+### **RMSE: Root Mean Square Error for LASSO Model**
+
+```{r LASSO-RMSE}
+# RMSE: Root Mean Square Error
+lasso_rmse <- last_fit(
+  final_lasso,
+  pine_split
+) %>%
+  collect_metrics() %>% 
+  filter(.metric == "rmse") %>% 
+  pull(.estimate)
+
+gauge(round(as.numeric(lasso_rmse),2), min = 0, max = 5,  gaugeSectors(success = c(1, 5), colors = '#A2CD5A'))
+
+```
