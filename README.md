@@ -21,6 +21,7 @@ The `tidymodels` workflows use `sqrt(DeadDist)` as the outcome. Their reported R
 ├── dashboard.Rmd                 # Flexdashboard source
 ├── data/
 │   └── pine_beetle_1993.xlsx     # Course-provided analysis dataset
+├── render_dashboard.R            # One-file local renderer
 ├── scripts/
 │   ├── install_packages.R        # Dependency installer
 │   └── privacy_check.sh          # Secret and local-path checks
@@ -30,14 +31,21 @@ The `tidymodels` workflows use `sqrt(DeadDist)` as the outcome. Their reported R
 
 ## Run locally
 
-Use R 4.3 or newer. From the repository root:
+`dashboard.Rmd` is not a standalone download: it needs the workbook in the
+repository's `data/` directory.
+
+1. On GitHub, select **Code → Download ZIP** (or clone the repository).
+2. Extract the ZIP.
+3. Open `HGEN612-Pine-Beetle-Flexdashboard.Rproj` in RStudio.
+4. Open `render_dashboard.R` and select **Source**, or run:
 
 ```r
-source("scripts/install_packages.R")
-rmarkdown::render("dashboard.Rmd")
+source("render_dashboard.R")
 ```
 
-The rendered `dashboard.html` is intentionally ignored because it is generated from the source and is approximately 18 MB.
+The first run installs missing R packages and creates `dashboard.html`, which
+opens in any modern browser. Use R 4.3 or newer. The generated HTML is ignored
+in Git because it is reproducible from source and is approximately 18 MB.
 
 ## Reproducibility
 

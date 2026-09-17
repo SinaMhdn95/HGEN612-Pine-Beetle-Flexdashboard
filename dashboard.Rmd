@@ -16,6 +16,14 @@ output:
 ```
 
 ```{r setup, include=FALSE}
+if (!file.exists("data/pine_beetle_1993.xlsx")) {
+  stop(
+    "This R Markdown file is not standalone. Download and extract the complete ",
+    "GitHub repository, then run render_dashboard.R.",
+    call. = FALSE
+  )
+}
+
 library(flexdashboard)
 library(tidymodels)      # for the parsnip package, along with the rest of tidymodels
 library(tidyverse)       # for importing data
