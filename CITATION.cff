@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you reuse this software, please cite the repository. The dataset has separate restrictions described in NOTICE.md."
+title: "Pine Beetle Modeling Flexdashboard"
+type: software
+authors:
+  - family-names: Mahdiani
+    given-names: Sina
+repository-code: "https://github.com/SinaMhdn95/HGEN612-Pine-Beetle-Flexdashboard"
+abstract: "An HGEN 612 flexdashboard comparing regression approaches for predicting distance to the nearest brood tree from ecological measurements."
+keywords:
+  - flexdashboard
+  - tidymodels
+  - ecological modeling
+  - pine beetle
+
