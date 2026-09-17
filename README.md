@@ -4,6 +4,8 @@
 
 An interactive `flexdashboard` created for **HGEN 612: Methods in Data Science** at Virginia Commonwealth University. The project examines tree- and neighborhood-level measurements from a 1993 Jeffrey pine beetle dataset and compares regression approaches for predicting the minimum distance to the nearest brood tree (`DeadDist`).
 
+**[View the live flexdashboard](https://sinamhdn95.github.io/HGEN612-Pine-Beetle-Flexdashboard/)**
+
 ## What the dashboard contains
 
 - Interactive spatial and exploratory views of the tree measurements
