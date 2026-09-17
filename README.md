@@ -57,7 +57,7 @@ source("tests/smoke_test.R")
 
 ## Data and reuse
 
-The workbook was supplied for an HGEN 612 course assignment. It contains ecological measurements, not human-subject data. Its upstream license was not provided with the course materials, so it is included in this private repository only to reproduce the assignment and should not be redistributed independently. See [NOTICE.md](NOTICE.md).
+The workbook was supplied for an HGEN 612 course assignment. It contains ecological measurements, not human-subject data. Its upstream license was not provided with the course materials, so it is included only to reproduce the assignment. Public availability in this repository does not grant reuse or redistribution rights. See [NOTICE.md](NOTICE.md).
 
 ## Author
 
